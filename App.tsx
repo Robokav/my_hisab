@@ -223,7 +223,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight leading-none">Hisab Pro</h1>
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight leading-none">My Hisab</h1>
                 <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-green-200">
                   <Database className="w-3 h-3" />
                   SAVED LOCALLY

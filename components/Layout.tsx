@@ -8,7 +8,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {children}
       </div>
       <footer className="mt-12 py-8 border-t border-slate-200 text-center text-slate-400 text-sm">
-        &copy; {new Date().getFullYear()} Hisab Pro • Your Daily Ledger
+        &copy; {new Date().getFullYear()} designed by kavin bavisi
       </footer>
     </div>
   );
