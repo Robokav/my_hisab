@@ -1,8 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
-import { Category, TransactionType, Transaction } from '../types';
+import { Category, TransactionType, Transaction,Profile } from '../types';
 import * as LucideIcons from 'lucide-react';
-import { X, Plus, Trash2, Edit2, ArrowUp, ArrowDown, Sparkles, Loader2, IndianRupee, Activity, WifiOff, AlertTriangle } from 'lucide-react';
+import {X, Plus, Trash2, LayoutGrid, Edit2, Undo, Check, Layers, 
+  ArrowUp, ArrowDown, Sparkles, Loader2, IndianRupee, Activity, 
+  WifiOff } from 'lucide-react';
 import { suggestCategories } from '../services/geminiService';
 
 interface Props {
@@ -10,6 +12,11 @@ interface Props {
   onClose: () => void;
   categories: Category[];
   transactions: Transaction[];
+  profiles: Profile[];
+  activeProfileId: string;
+  onCreateProfile: () => void;
+  onDeleteProfile: (id: string) => void;
+  onUpdateProfile: (profile: Profile) => void;
   onUpdate: (cat: Category) => void;
   onDelete: (id: string) => void;
   onAdd: (name: string, type: TransactionType, color: string, icon: string) => string;
@@ -23,11 +30,18 @@ const AVAILABLE_ICONS = [
   'Banknote', 'Briefcase', 'TrendingUp', 'Plane', 'Book', 'Gift', 
   'Utensils', 'Smartphone', 'Stethoscope', 'Music', 'Dumbbell'
 ];
-
+const SELECTABLE_ICONS = [
+  'User', 'Briefcase', 'Home', 'ShoppingBag', 'Landmark', 'Heart', 'Smartphone', 'Zap', 
+  'Globe', 'Gift', 'Car', 'Utensils', 'Truck', 'Tag', 'Coffee'
+];
 const AVAILABLE_COLORS = [
-  '#ef4444', '#f97316', '#f59e0b', '#10b981', '#14b8a6', '#06b6d4', 
-  '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', 
-  '#f43f5e', '#64748b'
+{ name: 'Red', hex: '#ef4444' }, { name: 'Orange', hex: '#f97316' }, 
+  { name: 'Amber', hex: '#f59e0b' }, { name: 'Emerald', hex: '#10b981' }, 
+  { name: 'Teal', hex: '#14b8a6' }, { name: 'Cyan', hex: '#06b6d4' }, 
+  { name: 'Blue', hex: '#3b82f6' }, { name: 'Indigo', hex: '#6366f1' }, 
+  { name: 'Violet', hex: '#8b5cf6' }, { name: 'Purple', hex: '#a855f7' }, 
+  { name: 'Fuchsia', hex: '#d946ef' }, { name: 'Pink', hex: '#ec4899' }, 
+  { name: 'Rose', hex: '#f43f5e' }, { name: 'Slate', hex: '#64748b' }
 ];
 
 const IconRenderer: React.FC<{ name: string; className?: string; color?: string }> = ({ name, className, color }) => {
@@ -35,7 +49,10 @@ const IconRenderer: React.FC<{ name: string; className?: string; color?: string 
   return <IconComponent className={className} style={{ color }} />;
 };
 
-const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transactions, onUpdate, onDelete, onAdd, onReorder, onClearData, isOnline }) => {
+const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transactions, onUpdate, onDelete, onAdd, onReorder, onClearData, isOnline, profiles, activeProfileId, onCreateProfile, onDeleteProfile,
+  onUpdateProfile }) => {
+  const [activeTab, setActiveTab] = useState<'PROFILES' | 'CATEGORIES' | 'DATA'>('PROFILES');
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
@@ -57,7 +74,6 @@ const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transac
     return stats;
   }, [transactions]);
 
-  if (!isOpen) return null;
 
   const startEditing = (cat: Category) => {
     setEditingId(cat.id);
@@ -115,42 +131,189 @@ const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transac
       onReorder(newCategories);
     }
   };
+  // Profile Edit State
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [editProfName, setEditProfName] = useState('');
+  const [editProfColor, setEditProfColor] = useState('');
+  const [editProfIcon, setEditProfIcon] = useState('');
 
+  const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
+
+  const activeProfile = profiles.find(p => p.id === activeProfileId);
+
+  // Profile Edit Logic
+  const startEditingProfile = (p: Profile) => {
+    setEditingProfileId(p.id);
+    setEditProfName(p.name);
+    setEditProfColor(p.color);
+    setEditProfIcon(p.icon);
+  };
+
+  const saveProfileEdit = (p: Profile) => {
+    onUpdateProfile({
+      ...p,
+      name: editProfName,
+      color: editProfColor,
+      icon: editProfIcon
+    });
+    setEditingProfileId(null);
+  };
+  
+  if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
+   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">App Settings</h2>
-            <p className="text-xs text-slate-400">Configure your hisab management</p>
-          </div>
+          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <LayoutGrid className="w-5 h-5 text-indigo-600" />
+            Control Center
+          </h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
             <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
-          {/* Data Management Section */}
-          <section className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Data Management</h3>
-            <div className="p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-                <div>
-                  <p className="text-sm font-bold text-red-900">Reset All Data</p>
-                  <p className="text-xs text-red-600">Delete all your history from this device.</p>
-                </div>
+        <div className="flex border-b border-slate-100 overflow-x-auto no-scrollbar">
+          {(['PROFILES', 'CATEGORIES', 'DATA'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 min-w-[100px] py-4 text-[10px] font-extrabold uppercase tracking-[0.2em] transition-all relative ${
+                activeTab === tab 
+                  ? 'text-indigo-600' 
+                  : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {tab}
+              {activeTab === tab && (
+                <div className="absolute bottom-0 left-0 w-full h-1 bg-indigo-600 rounded-t-full" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/20 no-scrollbar">
+          {activeTab === 'PROFILES' && (
+            <div className="space-y-6 animate-in slide-in-from-right-2 duration-300">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Interfaces</h3>
+                <button 
+                  onClick={onCreateProfile}
+                  className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  Quick Create
+                </button>
               </div>
-              <button 
-                onClick={onClearData}
-                className="px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-colors shadow-sm"
-              >
-                Clear Now
-              </button>
+              <div className="grid gap-3">
+                {profiles.map(p => (
+                  <div key={p.id} className={`flex flex-col p-4 rounded-2xl border transition-all ${editingProfileId === p.id ? 'border-indigo-400 bg-indigo-50/50 ring-2 ring-indigo-100 shadow-md' : activeProfileId === p.id ? 'border-indigo-600 bg-indigo-50/30' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                    {editingProfileId === p.id ? (
+                      <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Interface Name</label>
+                            <input 
+                              type="text" 
+                              value={editProfName}
+                              autoFocus
+                              onChange={(e) => setEditProfName(e.target.value)}
+                              className="w-full text-sm font-bold border-slate-200 rounded-xl px-3 py-1.5 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-1">Preview</label>
+                            <div className="p-2 rounded-xl border border-slate-200 shadow-sm bg-white">
+                              <IconRenderer name={editProfIcon} className="w-6 h-6" color={editProfColor} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block ml-1">Theme Color</label>
+                          <div className="flex flex-wrap gap-2">
+                            {AVAILABLE_COLORS.map(c => (
+                              <button 
+                                key={c.hex}
+                                onClick={() => setEditProfColor(c.hex)}
+                                className={`w-7 h-7 rounded-lg border-2 transition-transform active:scale-90 ${editProfColor === c.hex ? 'border-slate-900 scale-110' : 'border-transparent opacity-80'}`}
+                                style={{ backgroundColor: c.hex }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block ml-1">Icon</label>
+                          <div className="flex flex-wrap gap-2">
+                            {SELECTABLE_ICONS.map(icon => (
+                              <button 
+                                key={icon}
+                                onClick={() => setEditProfIcon(icon)}
+                                className={`p-1.5 rounded-lg border-2 transition-all active:scale-90 ${editProfIcon === icon ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 hover:border-slate-200'}`}
+                              >
+                                <IconRenderer name={icon} className="w-4 h-4" color={editProfIcon === icon ? '#4f46e5' : '#94a3b8'} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <button onClick={() => setEditingProfileId(null)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-slate-600">
+                            <Undo className="w-3 h-3" />
+                            Cancel
+                          </button>
+                          <button 
+                            onClick={() => saveProfileEdit(p)} 
+                            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-md active:scale-95"
+                          >
+                            <Check className="w-3 h-3" />
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-2xl flex items-center justify-center shadow-inner" style={{ backgroundColor: p.color + '15' }}>
+                            <IconRenderer name={p.icon} className="w-5 h-5" color={p.color} />
+                          </div>
+                          <div>
+                            <p className={`text-sm font-bold ${activeProfileId === p.id ? 'text-indigo-900' : 'text-slate-800'}`}>
+                              {p.name}
+                              {activeProfileId === p.id && <span className="ml-2 text-[8px] bg-indigo-600 text-white px-2 py-0.5 rounded-full uppercase">Active</span>}
+                            </p>
+                            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Hisab Ledger</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => startEditingProfile(p)}
+                            className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Edit Interface"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          {profiles.length > 1 && (
+                            <button 
+                              onClick={() => onDeleteProfile(p.id)} 
+                              className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete Interface"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </section>
+          )}
 
           {/* Categories Section */}
+            {activeTab === 'CATEGORIES' && (
           <section className="space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Manage Categories</h3>
@@ -352,6 +515,51 @@ const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transac
               })}
             </div>
           </section>
+            )}
+            {activeTab === 'DATA' && (
+            <div className="space-y-6 animate-in slide-in-from-right-2 duration-300">
+              {/* Profile Deletion Section */}
+              <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-center sm:text-left">
+                  <div className="flex items-center gap-2 mb-1 justify-center sm:justify-start">
+                    <Layers className="w-4 h-4 text-amber-600" />
+                    <p className="text-base font-extrabold text-amber-900">Delete This Profile</p>
+                  </div>
+                  <p className="text-xs text-amber-600">Permanently remove the active ledger: <strong>"{activeProfile?.name}"</strong>.</p>
+                </div>
+                <button 
+                  onClick={() => activeProfile && onDeleteProfile(activeProfile.id)} 
+                  disabled={profiles.length <= 1}
+                  className={`w-full sm:w-auto px-6 py-3 text-white text-xs font-extrabold rounded-xl shadow-lg transition-all active:scale-95 ${profiles.length <= 1 ? 'bg-slate-300 cursor-not-allowed shadow-none' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'}`}
+                >
+                  DELETE PROFILE
+                </button>
+              </div>
+
+              {/* Full System Reset Section */}
+              <div className="p-6 bg-red-50 rounded-3xl border border-red-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-center sm:text-left">
+                  <div className="flex items-center gap-2 mb-1 justify-center sm:justify-start">
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <p className="text-base font-extrabold text-red-900">Factory Reset</p>
+                  </div>
+                  <p className="text-xs text-red-600 mt-1">This will permanently delete all profiles and transactions from this phone.</p>
+                </div>
+                <button 
+                  onClick={onClearData} 
+                  className="w-full sm:w-auto px-6 py-3 bg-red-600 text-white text-xs font-extrabold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 active:scale-95"
+                >
+                  WIPE ALL DATA
+                </button>
+              </div>
+              
+              {profiles.length <= 1 && (
+                <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest px-6">
+                  Note: You must have at least one profile. To delete this one, create another first.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

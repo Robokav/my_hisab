@@ -32,7 +32,6 @@ const IconRenderer: React.FC<{ name: string; className?: string; color?: string 
 const App: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
-  // Profile State
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     const saved = dbService.getProfiles();
     if (saved.length > 0) return saved;
@@ -167,7 +166,7 @@ const App: React.FC = () => {
   }, [transactions, period, categories]);
 
   const handleCreateProfile = (name: string, color: string, icon: string) => {
-    const id = 'p_' + Math.random().toString(36).substring(2, 9);
+    const id = "p_" + Math.random().toString(36).substring(2, 9);
     const newProfile: Profile = {
       id,
       name,
@@ -185,7 +184,8 @@ const App: React.FC = () => {
       alert("You must have at least one Interface.");
       return;
     }
-    if (confirm("DANGER: This will permanently delete this entire interface and ALL its data. This cannot be undone! Continue?")) {
+    const targetProfile = profiles.find(p => p.id === id);
+    if (confirm(`DANGER: This will permanently delete the "${targetProfile?.name}" interface and ALL its data. This cannot be undone! Continue?`)) {
       setProfiles(prev => prev.filter(p => p.id !== id));
       dbService.deleteProfileData(id);
       if (activeProfileId === id) {
@@ -193,6 +193,10 @@ const App: React.FC = () => {
         setActiveProfileId(remaining[0].id);
       }
     }
+  };
+
+  const handleUpdateProfile = (updatedProfile: Profile) => {
+    setProfiles(prev => prev.map(p => p.id === updatedProfile.id ? updatedProfile : p));
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
@@ -246,7 +250,7 @@ const App: React.FC = () => {
       {!isOnline && (
         <div className="fixed top-0 left-0 w-full bg-slate-800 text-white py-1.5 px-4 text-[10px] font-black tracking-widest flex items-center justify-center gap-2 z-[9999] shadow-md animate-in slide-in-from-top duration-300">
           <WifiOff className="w-3 h-3" />
-          OFFLINE MODE &bull; DATA SAVING LOCALLY
+          OFFLINE MODE {"\u2022"} DATA SAVING LOCALLY
         </div>
       )}
 
@@ -414,7 +418,9 @@ const App: React.FC = () => {
         isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)}
         categories={categories} transactions={transactions}
         profiles={profiles} activeProfileId={activeProfileId}
-        onCreateProfile={() => setIsCreateProfileOpen(true)} onDeleteProfile={deleteProfile}
+        onCreateProfile={() => setIsCreateProfileOpen(true)} 
+        onDeleteProfile={deleteProfile}
+        onUpdateProfile={handleUpdateProfile}
         onUpdateCategory={(cat) => setCategories(prev => prev.map(c => c.id === cat.id ? cat : c))}
         onDeleteCategory={(id) => setCategories(prev => prev.filter(c => c.id !== id))}
         onReorderCategories={(newCats) => setCategories(newCats)}
