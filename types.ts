@@ -2,6 +2,14 @@
 export type TransactionType = 'INCOME' | 'EXPENSE';
 export type PaymentMode = 'CASH' | 'UPI' | 'CARD' | 'BANK' | 'WALLET' | 'NET_BANKING' | 'OTHER';
 
+export interface Profile {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  createdAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -19,7 +27,7 @@ export interface Transaction {
   categoryId: string;
   categoryName: string;
   date: string;
-  createdAt: string; // ISO timestamp for sorting
+  createdAt: string; 
   type: TransactionType;
   paymentMode: PaymentMode;
 }

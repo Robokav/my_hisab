@@ -1,10 +1,8 @@
-
-const CACHE_NAME = 'hisab-pro-v2';
+const CACHE_NAME = 'hisab-pro-v4';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
 
 // On install, cache the core app shell
@@ -27,27 +25,46 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Stale-While-Revalidate Strategy
-// Returns from cache immediately if available, but fetches from network to update cache
 self.addEventListener('fetch', event => {
-  // Skip cross-origin requests for tracking/analytics if any (though we have none)
+  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // CRITICAL FIX: Only handle http and https schemes. 
+  // This avoids the 'chrome-extension' is unsupported error.
+  if (!['http:', 'https:'].includes(url.protocol)) return;
+
+  // Strategy 1: Network-First for main page/root
+  if (url.origin === self.location.origin && (url.pathname === '/' || url.pathname === '/index.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response.status === 200) {
+            const clonedResponse = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clonedResponse));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Strategy 2: Stale-While-Revalidate for other assets (JS, CSS, images)
   event.respondWith(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.match(event.request).then(response => {
+      return cache.match(event.request).then(cachedResponse => {
         const fetchPromise = fetch(event.request).then(networkResponse => {
-          // Only cache successful responses
           if (networkResponse && networkResponse.status === 200) {
             cache.put(event.request, networkResponse.clone());
           }
           return networkResponse;
-        }).catch(() => {
-          // If network fails and no cache, we just fail silently or return offline page
+        }).catch(err => {
+          return cachedResponse;
         });
         
-        // Return cached version or wait for network
-        return response || fetchPromise;
+        return cachedResponse || fetchPromise;
       });
     })
   );

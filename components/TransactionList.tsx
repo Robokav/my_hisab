@@ -5,17 +5,18 @@ import * as LucideIcons from 'lucide-react';
 import { 
   Trash2, TrendingDown, TrendingUp, Calendar, Tag, Package, CreditCard, Banknote, 
   Smartphone, Landmark, MoreHorizontal, Search, ChevronDown, Filter, Wallet as WalletIcon, 
-  Globe, X, ChevronUp, IndianRupee
+  Globe, X, ChevronUp, IndianRupee, Edit2
 } from 'lucide-react';
 
 interface Props {
   transactions: Transaction[];
   categories: Category[];
   onDelete: (id: string) => void;
+  onEdit: (transaction: Transaction) => void;
 }
 
-const ITEMS_PER_PAGE = 20;
-
+const ITEMS_PER_PAGE = 3;
+const LOAD_MORE_INCREMENT = 10;
 type DateFilterType = 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'LAST_30_DAYS' | 'CUSTOM';
 
 const IconRenderer: React.FC<{ name: string; className?: string; color?: string }> = ({ name, className, color }) => {
@@ -52,7 +53,7 @@ const PaymentModeBadge: React.FC<{ mode: PaymentMode }> = ({ mode }) => {
   );
 };
 
-const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete }) => {
+const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, onEdit }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<PaymentMode | 'ALL'>('ALL');
   const [dateFilter, setDateFilter] = useState<DateFilterType>('ALL');
@@ -110,10 +111,8 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete }
         return matchesSearch && matchesMode && matchesDate && matchesMin && matchesMax && matchesType;
       })
       .sort((a, b) => {
-        // Primary sort: Date descending
         const dateComp = b.date.localeCompare(a.date);
         if (dateComp !== 0) return dateComp;
-        // Secondary sort: Creation time descending (handles items added on the same day)
         return (b.createdAt || '').localeCompare(a.createdAt || '');
       });
   }, [transactions, searchTerm, filterMode, dateFilter, customDate, minAmount, maxAmount, filterType]);
@@ -335,12 +334,22 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete }
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => onDelete(t.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => onEdit(t)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                          title="Edit Transaction"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onDelete(t.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
+                          title="Delete Transaction"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -363,7 +372,7 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete }
       {hasMore && (
         <div className="p-4 border-t border-slate-100 flex justify-center bg-slate-50/30">
           <button
-            onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
+            onClick={() => setVisibleCount(prev => prev + LOAD_MORE_INCREMENT)}
             className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700 bg-white px-6 py-2 rounded-xl border border-slate-200 shadow-sm transition-all"
           >
             Load More History
