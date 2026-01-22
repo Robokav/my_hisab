@@ -1,14 +1,20 @@
-const CACHE_NAME = 'hisab-pro-v4';
-const APP_SHELL = [
+
+const CACHE_NAME = 'hisab-pro-v5';
+const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+  'https://cdn-icons-png.flaticon.com/512/2933/2933116.png'
 ];
 
 // On install, cache the core app shell
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('SW: Pre-caching static assets');
+      return cache.addAll(STATIC_ASSETS);
+    })
   );
   self.skipWaiting();
 });
@@ -18,7 +24,10 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.map(key => {
-        if (key !== CACHE_NAME) return caches.delete(key);
+        if (key !== CACHE_NAME) {
+          console.log('SW: Removing old cache', key);
+          return caches.delete(key);
+        }
       })
     ))
   );
@@ -31,27 +40,22 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(event.request.url);
 
-  // CRITICAL FIX: Only handle http and https schemes. 
-  // This avoids the 'chrome-extension' is unsupported error.
-  if (!['http:', 'https:'].includes(url.protocol)) return;
-
-  // Strategy 1: Network-First for main page/root
-  if (url.origin === self.location.origin && (url.pathname === '/' || url.pathname === '/index.html')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          if (response.status === 200) {
-            const clonedResponse = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clonedResponse));
-          }
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
+  // CRITICAL: Skip Service Worker for ALL development requests
+  // This includes Vite's HMR scripts and the WebSocket connection.
+  if (
+    url.hostname === 'localhost' || 
+    url.hostname === '127.0.0.1' || 
+    url.port === '5173' ||
+    url.pathname.includes('@vite') || 
+    url.pathname.includes('__vite')
+  ) {
     return;
   }
 
-  // Strategy 2: Stale-While-Revalidate for other assets (JS, CSS, images)
+  // Skip unsupported schemes (chrome-extension, etc.)
+  if (!['http:', 'https:'].includes(url.protocol)) return;
+
+  // Strategy: Stale-While-Revalidate for other assets
   event.respondWith(
     caches.open(CACHE_NAME).then(cache => {
       return cache.match(event.request).then(cachedResponse => {
@@ -60,10 +64,10 @@ self.addEventListener('fetch', event => {
             cache.put(event.request, networkResponse.clone());
           }
           return networkResponse;
-        }).catch(err => {
+        }).catch(() => {
           return cachedResponse;
         });
-        
+
         return cachedResponse || fetchPromise;
       });
     })

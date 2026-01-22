@@ -16,6 +16,9 @@ import { dbService } from './services/dbService';
 import { Wallet, Settings2, Plus, ChevronDown, CheckCircle2, Download, WifiOff, CalendarSearch, ChevronRight, BrainCircuit, Sparkles } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 
+// Run migrations before App starts
+dbService.migrate();
+
 const DEFAULT_CATEGORIES: Category[] = [
   { id: '1', name: 'Salary', type: 'INCOME', color: '#10b981', icon: 'Banknote' },
   { id: '2', name: 'Freelance', type: 'INCOME', color: '#6366f1', icon: 'Briefcase' },
@@ -433,6 +436,14 @@ const App: React.FC = () => {
           if(confirm("DANGER: This will wipe ALL data for ALL interfaces on this phone. Are you sure?")) {
             dbService.clearAll();
             window.location.reload();
+          }
+        }}
+        onRestoreBackup={(json) => {
+          if (dbService.importFullBackup(json)) {
+             alert("System Restored Successfully!");
+             window.location.reload();
+          } else {
+             alert("Restore Failed. Invalid file format.");
           }
         }}
         isOnline={isOnline}

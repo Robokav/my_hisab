@@ -1,11 +1,12 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo,useRef } from 'react';
 import { Category, TransactionType, Transaction,Profile } from '../types';
 import * as LucideIcons from 'lucide-react';
 import {X, Plus, Trash2, LayoutGrid, Edit2, Undo, Check, Layers, 
   ArrowUp, ArrowDown, Sparkles, Loader2, IndianRupee, Activity, 
-  WifiOff } from 'lucide-react';
+  WifiOff,Database,ShieldCheck,UploadCloud,DownloadCloud } from 'lucide-react';
 import { suggestCategories } from '../services/geminiService';
+import { dbService } from '../services/dbService';
 
 interface Props {
   isOpen: boolean;
@@ -21,6 +22,7 @@ interface Props {
   onDelete: (id: string) => void;
   onAdd: (name: string, type: TransactionType, color: string, icon: string) => string;
   onReorder: (newOrder: Category[]) => void;
+  onRestoreBackup: (json: string) => void;
   onClearData: () => void;
   isOnline: boolean;
 }
@@ -50,9 +52,9 @@ const IconRenderer: React.FC<{ name: string; className?: string; color?: string 
 };
 
 const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transactions, onUpdate, onDelete, onAdd, onReorder, onClearData, isOnline, profiles, activeProfileId, onCreateProfile, onDeleteProfile,
-  onUpdateProfile }) => {
+  onUpdateProfile,onRestoreBackup }) => {
   const [activeTab, setActiveTab] = useState<'PROFILES' | 'CATEGORIES' | 'DATA'>('PROFILES');
-
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
@@ -140,6 +142,30 @@ const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transac
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
   const activeProfile = profiles.find(p => p.id === activeProfileId);
+  
+  const handleFullBackup = () => {
+    const backupJson = dbService.exportFullBackup();
+    const blob = new Blob([backupJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.href = url;
+    link.download = `Hisab_Pro_Full_Vault_${dateStr}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      onRestoreBackup(content);
+    };
+    reader.readAsText(file);
+  };
 
   // Profile Edit Logic
   const startEditingProfile = (p: Profile) => {
@@ -516,8 +542,45 @@ const CategoryManager: React.FC<Props> = ({ isOpen, onClose, categories, transac
             </div>
           </section>
             )}
-            {activeTab === 'DATA' && (
+           {activeTab === 'DATA' && (
             <div className="space-y-6 animate-in slide-in-from-right-2 duration-300">
+              {/* Vault Section */}
+              <div className="p-6 bg-slate-900 rounded-[2rem] border border-slate-800 text-white relative overflow-hidden group">
+                <Database className="absolute top-0 right-0 p-4 w-24 h-24 text-white/5 group-hover:scale-110 transition-transform" />
+                <div className="relative z-10 space-y-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <ShieldCheck className="w-5 h-5 text-indigo-400" />
+                      <h3 className="text-base font-black uppercase tracking-widest">Full System Vault</h3>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-bold leading-relaxed">Absolute protection. Backup all profiles, transactions, and settings into a single JSON file for offline storage or moving to another device.</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={handleFullBackup}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-indigo-900/40"
+                    >
+                      <DownloadCloud className="w-4 h-4" />
+                      Backup Vault
+                    </button>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 border border-slate-700"
+                    >
+                      <UploadCloud className="w-4 h-4" />
+                      Restore Vault
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept=".json"
+                      onChange={handleFileUpload}
+                    />
+                  </div>
+                </div>
+              </div>
               {/* Profile Deletion Section */}
               <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-center sm:text-left">
