@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Transaction, HisabStats, Category, ReportPeriod, Profile, TransactionType, PaymentMode, MonthlyOpeningBalance } from './types';
 import Layout from './components/Layout';
 import TransactionForm from './components/TransactionForm';
@@ -13,7 +13,7 @@ import EditTransactionModal from './components/EditTransactionModal';
 import CreateProfileModal from './components/CreateProfileModal';
 import InstallGuide from './components/InstallGuide';
 import { dbService } from './services/dbService';
-import { Wallet, Settings2, Plus, ChevronDown, CheckCircle2, Download, WifiOff, CalendarSearch, ChevronRight, BrainCircuit, Sparkles } from 'lucide-react';
+import { Wallet, Settings2, Plus, ChevronDown, CheckCircle2, Download, WifiOff, CalendarSearch, ChevronRight, BrainCircuit, Sparkles, Undo, Trash2, X } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 
 dbService.migrate();
@@ -59,6 +59,11 @@ const App: React.FC = () => {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isMathIntelOpen, setIsMathIntelOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Undo System States
+  const [lastDeleted, setLastDeleted] = useState<Transaction | null>(null);
+  const [showUndo, setShowUndo] = useState(false);
+  const undoTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -215,8 +220,34 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
-    setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+    setTransactions(prev => prev.map(t => t.id === updatedTx.id ? { ...updatedTx, updatedAt: new Date().toISOString() } : t));
     setEditingTransaction(null);
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    const txToDelete = transactions.find(t => t.id === id);
+    if (txToDelete) {
+      // Clear existing timer
+      if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+      
+      setLastDeleted(txToDelete);
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      setShowUndo(true);
+      
+      // Auto-hide undo after 6 seconds
+      undoTimerRef.current = window.setTimeout(() => {
+        setShowUndo(false);
+      }, 6000);
+    }
+  };
+
+  const handleUndoDelete = () => {
+    if (lastDeleted) {
+      setTransactions(prev => [...prev, lastDeleted]);
+      setLastDeleted(null);
+      setShowUndo(false);
+      if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    }
   };
 
   const handleAddCategory = (name: string, type: TransactionType) => {
@@ -226,7 +257,6 @@ const App: React.FC = () => {
   };
 
   const handleUpdateOpeningBalanceTotal = (amount: number) => {
-    // This is called from MonthlyInspector for current month if it supports it
     setOpeningBalance(amount);
   };
 
@@ -236,7 +266,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const headers = ['Date', 'Description', 'Category', 'Type', 'Amount', 'Payment Mode', 'Quantity', 'Unit'];
+    const headers = ['Date', 'Description', 'Category', 'Type', 'Amount', 'Payment Mode', 'Quantity', 'Unit', 'Created At', 'Last Updated'];
     const sortedTransactions = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
     const rows = sortedTransactions.map(t => [
       t.date,
@@ -246,7 +276,9 @@ const App: React.FC = () => {
       t.amount,
       t.paymentMode,
       t.quantity,
-      `"${t.unit || ''}"`
+      `"${t.unit || ''}"`,
+      t.createdAt,
+      t.updatedAt || t.createdAt
     ]);
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
@@ -269,6 +301,34 @@ const App: React.FC = () => {
         <div className="fixed top-0 left-0 w-full bg-slate-800 text-white py-1.5 px-4 text-[10px] font-black tracking-widest flex items-center justify-center gap-2 z-[9999] shadow-md animate-in slide-in-from-top duration-300">
           <WifiOff className="w-3 h-3" />
           OFFLINE MODE {"\u2022"} DATA SAVING LOCALLY
+        </div>
+      )}
+
+      {/* Global Undo Notification */}
+      {showUndo && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] w-[calc(100%-2rem)] max-w-sm animate-in slide-in-from-bottom-6 duration-300">
+          <div className="bg-slate-900/95 backdrop-blur-md text-white px-5 py-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700/50 ring-1 ring-white/5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500/10 rounded-xl">
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </div>
+              <span className="text-[11px] font-black uppercase tracking-widest">Entry Removed</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleUndoDelete}
+                className="flex items-center gap-1.5 bg-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 active:scale-95 transition-all shadow-lg shadow-indigo-900/40"
+              >
+                <Undo className="w-3 h-3" /> Undo
+              </button>
+              <button 
+                onClick={() => setShowUndo(false)}
+                className="p-1.5 text-slate-500 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -409,8 +469,8 @@ const App: React.FC = () => {
             <section>
               <TransactionForm 
                 categories={categories}
-                onAddTransaction={(newTx) => setTransactions(prev => [...prev, { ...newTx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString() }])} 
-                onAddTransactions={(newTxs) => setTransactions(prev => [...prev, ...newTxs.map(tx => ({ ...tx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString() }))])}
+                onAddTransaction={(newTx) => setTransactions(prev => [...prev, { ...newTx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }])} 
+                onAddTransactions={(newTxs) => setTransactions(prev => [...prev, ...newTxs.map(tx => ({ ...tx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))])}
                 onAddCategory={handleAddCategory}
                 isOnline={isOnline}
               />
@@ -419,9 +479,9 @@ const App: React.FC = () => {
               <TransactionList 
                 transactions={transactions} 
                 categories={categories} 
-                onDelete={(id) => setTransactions(prev => prev.filter(t => t.id !== id))} 
+                onDelete={handleDeleteTransaction} 
                 onEdit={(tx) => setEditingTransaction(tx)}
-                onAddTransactions={(newTxs) => setTransactions(prev => [...prev, ...newTxs.map(tx => ({ ...tx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString() }))])}
+                onAddTransactions={(newTxs) => setTransactions(prev => [...prev, ...newTxs.map(tx => ({ ...tx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))])}
                 onAddCategory={handleAddCategory}
               />
             </section>
@@ -476,6 +536,7 @@ const App: React.FC = () => {
           isOpen={!!editingTransaction}
           onClose={() => setEditingTransaction(null)}
           onUpdate={handleUpdateTransaction}
+          onDelete={handleDeleteTransaction}
           onAddCategory={handleAddCategory}
         />
       )}

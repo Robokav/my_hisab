@@ -181,7 +181,8 @@ const TransactionForm: React.FC<Props> = ({ categories, onAddTransaction, onAddT
              <span className="text-sm font-bold text-indigo-900">Quick Smart Entry (Multi-item supported)</span>
              {!isOnline && <span className="ml-auto text-[10px] font-bold text-slate-400">OFFLINE</span>}
           </div>
-          <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
+
             <input
               type="text"
               value={aiInput}
@@ -194,7 +195,10 @@ const TransactionForm: React.FC<Props> = ({ categories, onAddTransaction, onAddT
             <button
               onClick={handleAiParse}
               disabled={isParsing || !aiInput || !isOnline}
-              className={`rounded-2xl px-8 py-4 text-white shadow-sm flex items-center gap-2 transition-all font-bold text-sm tracking-wide ${aiInput.trim() ? 'bg-indigo-600 shadow-indigo-200' : 'bg-[#ced7ff] opacity-80'}`}
+              className={`w-full sm:w-auto rounded-2xl px-6 py-4 text-white shadow-sm flex items-center justify-center gap-2 transition-all font-bold text-sm tracking-wide whitespace-nowrap ${
+  aiInput.trim() ? 'bg-indigo-600 shadow-indigo-200' : 'bg-[#ced7ff] opacity-80'
+}`}
+
             >
               {isParsing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Magic Parse'}
             </button>

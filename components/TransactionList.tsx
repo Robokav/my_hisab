@@ -6,7 +6,7 @@ import {
   Trash2, TrendingDown, TrendingUp, Calendar, Tag, Package, CreditCard, Banknote, 
   Smartphone, Landmark, MoreHorizontal, Search, ChevronDown, Filter, Wallet as WalletIcon, 
   Globe, X, ChevronUp, IndianRupee, Edit2, CalendarRange, ListFilter, Download, Upload, Check, AlertCircle, HelpCircle, ChevronRight,
-  History, Info, FileSpreadsheet, Undo, ArrowLeftRight
+  History, Info, FileSpreadsheet, Undo, ArrowLeftRight, Clock, ShieldCheck, Plus
 } from 'lucide-react';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
   categories: Category[];
   onDelete: (id: string) => void;
   onEdit: (transaction: Transaction) => void;
-  onAddTransactions?: (transactions: Omit<Transaction, 'id' | 'createdAt'>[]) => void;
+  onAddTransactions?: (transactions: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>[]) => void;
   onAddCategory?: (name: string, type: TransactionType) => string;
 }
 
@@ -26,6 +26,19 @@ type DateFilterType = 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'LAST_7_DAYS
 const IconRenderer: React.FC<{ name: string; className?: string; color?: string }> = ({ name, className, color }) => {
   const IconComponent = (LucideIcons as any)[name] || LucideIcons.Tag;
   return <IconComponent className={className} style={{ color }} />;
+};
+
+const formatSystemDate = (isoString?: string) => {
+  if (!isoString) return 'N/A';
+  const d = new Date(isoString);
+  return d.toLocaleDateString('en-IN', { 
+    day: '2-digit', 
+    month: 'short', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
 };
 
 const PaymentModeBadge: React.FC<{ mode: PaymentMode }> = ({ mode }) => {
@@ -57,7 +70,6 @@ const PaymentModeBadge: React.FC<{ mode: PaymentMode }> = ({ mode }) => {
   );
 };
 
-// Robust CSV Parser
 const parseCSV = (text: string) => {
   const lines = text.split(/\r?\n/);
   return lines.filter(line => line.trim()).map(line => {
@@ -147,9 +159,11 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
   const [csvRows, setCsvRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<Record<string, number>>({});
   
-  // Confirmation state
   const [showImportConfirm, setShowImportConfirm] = useState(false);
-  const [pendingTxs, setPendingTxs] = useState<Omit<Transaction, 'id' | 'createdAt'>[]>([]);
+  const [pendingTxs, setPendingTxs] = useState<Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>[]>([]);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [detailTx, setDetailTx] = useState<Transaction | null>(null);
 
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE);
@@ -175,7 +189,6 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
         
         let matchesDate = true;
         const txDateStr = t.date;
-        const txDate = new Date(t.date);
 
         if (dateFilter === 'CUSTOM' && customDate) matchesDate = txDateStr === customDate;
         else if (dateFilter === 'RANGE' && startDate && endDate) matchesDate = txDateStr >= startDate && txDateStr <= endDate;
@@ -189,8 +202,10 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
           const sevenDaysAgo = new Date();
           sevenDaysAgo.setDate(now.getDate() - 7);
           matchesDate = txDateStr >= sevenDaysAgo.toISOString().split('T')[0];
-        } else if (dateFilter === 'THIS_MONTH') matchesDate = txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
-        else if (dateFilter === 'LAST_30_DAYS') {
+        } else if (dateFilter === 'THIS_MONTH') {
+          const txDate = new Date(t.date);
+          matchesDate = txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+        } else if (dateFilter === 'LAST_30_DAYS') {
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(now.getDate() - 30);
           matchesDate = txDateStr >= thirtyDaysAgo.toISOString().split('T')[0];
@@ -265,7 +280,7 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
 
   const handlePrepareImport = () => {
     if (!onAddTransactions || !onAddCategory) return;
-    const newTxs: Omit<Transaction, 'id' | 'createdAt'>[] = [];
+    const newTxs: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>[] = [];
     const localCategories = [...categories];
     csvRows.forEach(row => {
       const amountVal = parseFloat(row[mapping['amount']]) || 0;
@@ -290,43 +305,174 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
 
   const handleFinalizeImport = () => {
     if (onAddTransactions && pendingTxs.length > 0) {
-      onAddTransactions(pendingTxs);
+      onAddTransactions(pendingTxs as any);
     }
     setPendingTxs([]);
     setShowImportConfirm(false);
   };
 
+  const confirmDelete = () => {
+    if (deletingId) {
+      onDelete(deletingId);
+      setDeletingId(null);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+      {/* Transaction Detail Modal Overlay */}
+      {detailTx && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setDetailTx(null)}>
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 cursor-default" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 sm:p-8 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl shadow-sm ${detailTx.type === 'INCOME' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                  {detailTx.type === 'INCOME' ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 leading-none">Entry Audit</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Full System Metadata</p>
+                </div>
+              </div>
+              <button onClick={() => setDetailTx(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400" /></button>
+            </div>
+            
+            <div className="p-6 sm:p-8 space-y-8 overflow-y-auto max-h-[70vh] no-scrollbar">
+              {/* Financial Breakdown */}
+              <div className="space-y-4">
+                 <div className="flex items-center gap-2">
+                   <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                   <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Financial Identity</h4>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</label>
+                      <p className="text-lg font-black text-slate-900">₹{detailTx.amount.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Category</label>
+                      <p className="text-sm font-bold text-slate-800 truncate">{detailTx.categoryName}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Method</label>
+                      <p className="text-sm font-bold text-slate-800">{detailTx.paymentMode}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantity/Unit</label>
+                      <p className="text-sm font-bold text-slate-800">{detailTx.quantity} {detailTx.unit || 'Units'}</p>
+                    </div>
+                 </div>
+                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                    <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Full Description</label>
+                    <p className="text-sm font-medium text-slate-800 leading-relaxed">{detailTx.description}</p>
+                 </div>
+              </div>
+
+              {/* System Audit */}
+              <div className="space-y-4">
+                 <div className="flex items-center gap-2">
+                   <Clock className="w-4 h-4 text-indigo-600" />
+                   <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Audit Logs</h4>
+                 </div>
+                 <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Transaction Date</p>
+                        <p className="text-xs font-bold text-slate-800">{new Date(detailTx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                      </div>
+                      <Calendar className="w-4 h-4 text-slate-300" />
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase">System Created On</p>
+                        <p className="text-xs font-bold text-slate-800">{formatSystemDate(detailTx.createdAt)}</p>
+                      </div>
+                      <Plus className="w-4 h-4 text-slate-300" />
+                    </div>
+                    {detailTx.updatedAt && detailTx.updatedAt !== detailTx.createdAt && (
+                      <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                        <div>
+                          <p className="text-[9px] font-black text-indigo-400 uppercase">Last Updated On</p>
+                          <p className="text-xs font-bold text-indigo-900">{formatSystemDate(detailTx.updatedAt)}</p>
+                        </div>
+                        <Edit2 className="w-4 h-4 text-indigo-300" />
+                      </div>
+                    )}
+                 </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-200 flex gap-3">
+               <button onClick={() => setDetailTx(null)} className="flex-1 py-4 bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl active:scale-95 transition-all">Close Inspector</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal Overlay */}
+      {deletingId && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center space-y-6">
+              <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <Trash2 className="w-10 h-10 text-red-600" />
+              </div>
+              
+              <div>
+                <h3 className="text-xl font-black text-slate-900 mb-2">Permanently Delete?</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Are you sure you want to remove this entry from your ledger? This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={confirmDelete}
+                  className="w-full py-4 bg-red-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-red-100 hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Yes, Delete
+                </button>
+                <button 
+                  onClick={() => setDeletingId(null)}
+                  className="w-full py-3 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600"
+                >
+                  <Undo className="w-3.5 h-3.5 inline mr-1" /> No, Keep It
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3">
               Ledger History
               {filteredTransactions.length !== transactions.length && (
                 <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter animate-in fade-in">
-                  Filtered: {filteredTransactions.length}
+                  {filteredTransactions.length}
                 </span>
               )}
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <button onClick={handleExportFiltered} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-100 flex items-center gap-2 text-xs font-bold" title="Export Filtered">
                 <Download className="w-4 h-4" />
-                <span className="hidden sm:inline uppercase">Export</span>
+                <span className="hidden md:inline uppercase">Export</span>
               </button>
               <button onClick={() => fileInputRef.current?.click()} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-100 flex items-center gap-2 text-xs font-bold" title="Import CSV">
                 <Upload className="w-4 h-4" />
-                <span className="hidden sm:inline uppercase">Import</span>
+                <span className="hidden md:inline uppercase">Import</span>
                 <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleImportFileChange} />
               </button>
               <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-indigo-600 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors uppercase tracking-widest border border-slate-100">
                 {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <Filter className="w-3 h-3" />}
-                {showAdvanced ? 'Hide' : 'More'}
+                <span className="hidden sm:inline">{showAdvanced ? 'Hide' : 'More'}</span>
               </button>
             </div>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 rounded-xl border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 w-full bg-white shadow-sm" />
@@ -349,8 +495,8 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
               <ArrowLeftRight className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="pl-9 pr-4 py-2 rounded-xl border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white w-full appearance-none shadow-sm">
                 <option value="ALL">All Flow</option>
-                <option value="EXPENSE">Expenses Only</option>
-                <option value="INCOME">Income Only</option>
+                <option value="EXPENSE">Expenses</option>
+                <option value="INCOME">Income</option>
               </select>
             </div>
             <div className="relative">
@@ -375,7 +521,7 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
             </div>
             <button onClick={resetFilters} className="flex items-center justify-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-red-500 py-2 border border-dashed border-slate-200 hover:border-red-100 rounded-xl transition-all">
               <X className="w-3 h-3" />
-              Clear All
+              Reset
             </button>
           </div>
 
@@ -384,28 +530,28 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
               {dateFilter === 'CUSTOM' && (
                 <div className="relative">
                   <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1 tracking-[0.2em]">Select Date</label>
-                  <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
+                  <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs font-bold focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
                 </div>
               )}
               {dateFilter === 'RANGE' && (
                 <div className="col-span-1 sm:col-span-2 grid grid-cols-2 gap-3">
                   <div className="relative">
                     <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1 tracking-[0.2em]">From</label>
-                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs font-bold focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
                   </div>
                   <div className="relative">
                     <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1 tracking-[0.2em]">To</label>
-                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs font-bold focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
                   </div>
                 </div>
               )}
               <div className="relative">
                 <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1 tracking-[0.2em]">Min (₹)</label>
-                <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
+                <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs font-bold focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
               </div>
               <div className="relative">
                 <label className="block text-[8px] font-black text-slate-400 uppercase mb-1 ml-1 tracking-[0.2em]">Max (₹)</label>
-                <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
+                <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} className="w-full px-4 py-2 rounded-xl border-slate-100 text-xs font-bold focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50" />
               </div>
             </div>
           )}
@@ -413,29 +559,33 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
       </div>
 
       <div className="overflow-x-auto no-scrollbar">
-        <table className="w-full text-left">
+        <table className="w-full text-left min-w-[600px] sm:min-w-0">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Details</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category & Mode</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th>
-              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
+              <th className="px-4 sm:px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+              <th className="px-4 sm:px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Details</th>
+              <th className="px-4 sm:px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</th>
+              <th className="px-4 sm:px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th>
+              <th className="px-4 sm:px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {displayedTransactions.length > 0 ? displayedTransactions.map((t) => {
               const cat = categories.find(c => c.id === t.categoryId);
               return (
-                <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-6 py-6 whitespace-nowrap text-xs text-slate-500 font-bold">
+                <tr 
+                  key={t.id} 
+                  className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
+                  onClick={() => setDetailTx(t)}
+                >
+                  <td className="px-4 sm:px-6 py-5 sm:py-6 whitespace-nowrap text-xs text-slate-500 font-bold">
                     {new Date(t.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                   </td>
-                  <td className="px-6 py-6">
+                  <td className="px-4 sm:px-6 py-5 sm:py-6">
                     <DescriptionCell description={t.description} quantity={t.quantity} unit={t.unit} />
                   </td>
-                  <td className="px-6 py-6 whitespace-nowrap">
-                    <div className="flex flex-col gap-2">
+                  <td className="px-4 sm:px-6 py-5 sm:py-6 whitespace-nowrap">
+                    <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black w-fit border shadow-sm" style={{ backgroundColor: (cat?.color || '#cbd5e1') + '10', color: cat?.color || '#64748b', borderColor: (cat?.color || '#cbd5e1') + '20' }}>
                         {cat && <IconRenderer name={cat.icon} className="w-3 h-3" color={cat.color} />}
                         {t.categoryName}
@@ -443,16 +593,22 @@ const TransactionList: React.FC<Props> = ({ transactions, categories, onDelete, 
                       <PaymentModeBadge mode={t.paymentMode} />
                     </div>
                   </td>
-                  <td className="px-6 py-6 whitespace-nowrap text-right">
-                    <div className={`flex items-center justify-end gap-1 text-sm font-black ${t.type === 'INCOME' ? 'text-green-600' : 'text-slate-900'}`}>
+                  <td className="px-4 sm:px-6 py-5 sm:py-6 whitespace-nowrap text-right">
+                    <div className={`flex items-center justify-end gap-1 text-[13px] font-black ${t.type === 'INCOME' ? 'text-green-600' : 'text-slate-900'}`}>
                       {t.type === 'INCOME' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
                       ₹{t.amount.toLocaleString()}
                     </div>
+                    {t.updatedAt && t.updatedAt !== t.createdAt && (
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <Clock className="w-2.5 h-2.5 text-indigo-400" />
+                        <span className="text-[7px] font-black text-indigo-400 uppercase tracking-tighter">Updated</span>
+                      </div>
+                    )}
                   </td>
-                  <td className="px-6 py-6 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
+                  <td className="px-4 sm:px-6 py-5 sm:py-6 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1 sm:opacity-20 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => onEdit(t)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => onDelete(t.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => setDeletingId(t.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
