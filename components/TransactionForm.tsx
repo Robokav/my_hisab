@@ -226,7 +226,7 @@ const TransactionForm: React.FC<Props> = ({ categories, onAddTransaction, onAddT
                     <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="col-span-2">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Description <span className="text-red-500 font-black">*</span></label>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Description</label>
                           <input type="text" value={tempDraft.description} onChange={(e) => setTempDraft({...tempDraft, description: e.target.value})} className="w-full text-sm font-bold border rounded-xl px-3 py-1.5 focus:ring-indigo-500" />
                         </div>
                         <div>
