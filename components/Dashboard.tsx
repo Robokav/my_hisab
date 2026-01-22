@@ -2,7 +2,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, AreaChart, Area } from 'recharts';
 import { HisabStats, ReportPeriod } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, Wallet, Calendar, Filter } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, Wallet, Calendar, Filter,Landmark,IndianRupee } from 'lucide-react';
 
 interface Props {
   stats: HisabStats;
@@ -35,51 +35,66 @@ const Dashboard: React.FC<Props> = ({ stats, period, onPeriodChange }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-2 opacity-5">
-            <ArrowUpCircle className="w-16 h-16" />
-          </div>
+     
+      {/* Primary Metrics Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Month's Start (Dark Card) */}
+        <div className="bg-[#1e293b] p-6 rounded-[1.5rem] shadow-xl relative overflow-hidden group">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-green-100 text-green-600 rounded-xl">
+            <div className="p-3 bg-white/10 text-white rounded-2xl group-hover:scale-110 transition-transform">
+              <Landmark className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Month's Start</p>
+              <p className="text-xl font-black text-white">₹{stats.openingBalance.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-2 -right-2 opacity-5">
+            <Landmark className="w-20 h-20 text-white" />
+          </div>
+        </div>
+
+        {/* Period Income (White Card) */}
+        <div className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200 relative overflow-hidden group">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-green-50 text-green-600 rounded-2xl group-hover:scale-110 transition-transform">
               <ArrowUpCircle className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Period Income</p>
-              <p className="text-2xl font-bold text-slate-900">₹{stats.totalIncome.toLocaleString()}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Period Income</p>
+              <p className="text-xl font-black text-slate-900">₹{stats.totalIncome.toLocaleString()}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-2 opacity-5">
-            <ArrowDownCircle className="w-16 h-16" />
-          </div>
+        {/* Period Expenses (White Card) */}
+        <div className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-200 relative overflow-hidden group">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-red-100 text-red-600 rounded-xl">
+            <div className="p-3 bg-red-50 text-red-600 rounded-2xl group-hover:scale-110 transition-transform">
               <ArrowDownCircle className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Period Expenses</p>
-              <p className="text-2xl font-bold text-slate-900">₹{stats.totalExpense.toLocaleString()}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Period Expenses</p>
+              <p className="text-xl font-black text-slate-900">₹{stats.totalExpense.toLocaleString()}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-800 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-2 opacity-10">
-            <Wallet className="w-16 h-16" />
-          </div>
+        {/* Period Balance / Available Funds (Dark Card) */}
+        <div className="bg-[#0f172a] p-6 rounded-[1.5rem] shadow-xl relative overflow-hidden group">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-500 text-white rounded-xl">
+            <div className="p-3 bg-indigo-600 text-white rounded-2xl group-hover:scale-110 transition-transform">
               <Wallet className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-300">Period Balance</p>
-              <p className={`text-2xl font-bold ${stats.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Period Balance</p>
+              <p className={`text-xl font-black ${stats.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
                 ₹{stats.balance.toLocaleString()}
               </p>
             </div>
+          </div>
+          <div className="absolute -bottom-2 -right-2 opacity-5">
+            <IndianRupee className="w-20 h-20 text-white" />
           </div>
         </div>
       </div>

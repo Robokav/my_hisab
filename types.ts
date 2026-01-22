@@ -10,6 +10,19 @@ export interface Profile {
   createdAt: string;
 }
 
+export interface OpeningBalanceEntry {
+  id: string;
+  source: string;
+  amount: number;
+}
+
+export interface MonthlyOpeningBalance {
+  profileId: string;
+  year: number;
+  month: number;
+  entries: OpeningBalanceEntry[];
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -38,8 +51,13 @@ export interface HisabStats {
   totalIncome: number;
   totalExpense: number;
   balance: number;
+  openingBalance: number;
+  incomeCount: number;
+  expenseCount: number;
+  totalCount: number;
   categoryData: { name: string; value: number; color: string }[];
   timeSeriesData: { label: string; income: number; expense: number }[];
+  daySpan: number;
 }
 
 export interface AiParsedTransaction {

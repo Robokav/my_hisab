@@ -60,20 +60,17 @@
 <body class="bg-slate-50">
     <div id="root"></div>
     <script>
-      if ('serviceWorker' in navigator) {
+      // Defensive Service Worker registration to fix 'invalid state' error
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         window.addEventListener('load', () => {
-          // Unregister existing workers first to ensure clean state during development
-          navigator.serviceWorker.getRegistrations().then(registrations => {
-            for(let registration of registrations) {
-              registration.unregister();
-            }
-          });
-
-          navigator.serviceWorker.register('/sw.js').then(reg => {
-            console.log('SW registered:', reg);
-          }).catch(err => {
-            console.log('SW registration failed:', err);
-          });
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(reg => {
+              console.log('Hisab Pro SW registered:', reg.scope);
+            })
+            .catch(err => {
+              // Silently handle registration failure in restricted environments
+              console.warn('Hisab Pro SW registration failed:', err);
+            });
         });
       }
     </script>

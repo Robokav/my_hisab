@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Transaction, HisabStats, Category, ReportPeriod, Profile, TransactionType } from './types';
+import { Transaction, HisabStats, Category, ReportPeriod, Profile, TransactionType, PaymentMode, MonthlyOpeningBalance } from './types';
 import Layout from './components/Layout';
 import TransactionForm from './components/TransactionForm';
 import TransactionList from './components/TransactionList';
@@ -16,7 +16,6 @@ import { dbService } from './services/dbService';
 import { Wallet, Settings2, Plus, ChevronDown, CheckCircle2, Download, WifiOff, CalendarSearch, ChevronRight, BrainCircuit, Sparkles } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 
-// Run migrations before App starts
 dbService.migrate();
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -51,6 +50,7 @@ const App: React.FC = () => {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [openingBalance, setOpeningBalance] = useState(0);
 
   const [period, setPeriod] = useState<ReportPeriod>('MONTH');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -78,8 +78,12 @@ const App: React.FC = () => {
     if (activeProfileId) {
       const loadedTransactions = dbService.getTransactions(activeProfileId);
       const loadedCategories = dbService.getCategories(activeProfileId);
+      const now = new Date();
+      const loadedOpeningTotal = dbService.getMonthlyOpeningBalanceTotal(activeProfileId, now.getFullYear(), now.getMonth());
+      
       setTransactions(loadedTransactions);
       setCategories(loadedCategories.length > 0 ? loadedCategories : DEFAULT_CATEGORIES);
+      setOpeningBalance(loadedOpeningTotal);
     }
   }, [activeProfileId]);
 
@@ -159,14 +163,22 @@ const App: React.FC = () => {
       ? 1 
       : Math.max(1, Math.ceil((maxTime - minTime) / (1000 * 60 * 60 * 24)) + 1);
 
+    const lifecycleIncome = transactions.reduce((acc, t) => t.type === 'INCOME' ? acc + t.amount : acc, 0);
+    const lifecycleExpense = transactions.reduce((acc, t) => t.type === 'EXPENSE' ? acc + t.amount : acc, 0);
+
     return {
-      totalIncome, totalExpense, balance: totalIncome - totalExpense,
-      incomeCount, expenseCount, totalCount: filtered.length,
+      totalIncome, 
+      totalExpense, 
+      balance: lifecycleIncome - lifecycleExpense + (period === 'MONTH' ? openingBalance : 0),
+      openingBalance: (period === 'MONTH' || period === 'TODAY') ? openingBalance : 0,
+      incomeCount, 
+      expenseCount, 
+      totalCount: filtered.length,
       categoryData: Object.entries(categoryAgg).map(([name, data]) => ({ name, ...data })),
       timeSeriesData: Object.entries(timeMap).map(([label, vals]) => ({ label, ...vals })),
       daySpan
     };
-  }, [transactions, period, categories]);
+  }, [transactions, period, categories, openingBalance]);
 
   const handleCreateProfile = (name: string, color: string, icon: string) => {
     const id = "p_" + Math.random().toString(36).substring(2, 9);
@@ -188,7 +200,7 @@ const App: React.FC = () => {
       return;
     }
     const targetProfile = profiles.find(p => p.id === id);
-    if (confirm(`DANGER: This will permanently delete the "${targetProfile?.name}" interface and ALL its data. This cannot be undone! Continue?`)) {
+    if (confirm(`DANGER: This will permanently delete the "${targetProfile?.name}" interface and ALL its data. Continue?`)) {
       setProfiles(prev => prev.filter(p => p.id !== id));
       dbService.deleteProfileData(id);
       if (activeProfileId === id) {
@@ -213,6 +225,11 @@ const App: React.FC = () => {
     return id;
   };
 
+  const handleUpdateOpeningBalanceTotal = (amount: number) => {
+    // This is called from MonthlyInspector for current month if it supports it
+    setOpeningBalance(amount);
+  };
+
   const exportAllToCsv = () => {
     if (transactions.length === 0) {
       alert("No data available to export.");
@@ -221,7 +238,6 @@ const App: React.FC = () => {
 
     const headers = ['Date', 'Description', 'Category', 'Type', 'Amount', 'Payment Mode', 'Quantity', 'Unit'];
     const sortedTransactions = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
-    
     const rows = sortedTransactions.map(t => [
       t.date,
       `"${t.description.replace(/"/g, '""')}"`,
@@ -239,9 +255,8 @@ const App: React.FC = () => {
     const link = document.createElement("a");
     const dateStr = new Date().toISOString().split('T')[0];
     const profileName = activeProfile.name.replace(/[^a-z0-9]/gi, '_');
-    
     link.setAttribute("href", url);
-    link.setAttribute("download", `Hisab_${profileName}_Full_Backup_${dateStr}.csv`);
+    link.setAttribute("download", `Hisab_${profileName}_Backup_${dateStr}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -384,7 +399,9 @@ const App: React.FC = () => {
                 <MonthlyInspector 
                   transactions={transactions} 
                   categories={categories} 
+                  profileId={activeProfileId}
                   onClose={() => setIsInspectorOpen(false)}
+                  onOpeningBalanceChange={handleUpdateOpeningBalanceTotal}
                 />
               </section>
             )}
@@ -404,6 +421,8 @@ const App: React.FC = () => {
                 categories={categories} 
                 onDelete={(id) => setTransactions(prev => prev.filter(t => t.id !== id))} 
                 onEdit={(tx) => setEditingTransaction(tx)}
+                onAddTransactions={(newTxs) => setTransactions(prev => [...prev, ...newTxs.map(tx => ({ ...tx, id: Math.random().toString(36).substring(2, 9), createdAt: new Date().toISOString() }))])}
+                onAddCategory={handleAddCategory}
               />
             </section>
           </>
@@ -433,7 +452,7 @@ const App: React.FC = () => {
            return id;
         }}
         onClearData={() => {
-          if(confirm("DANGER: This will wipe ALL data for ALL interfaces on this phone. Are you sure?")) {
+          if(confirm("DANGER: Wipe ALL data for ALL interfaces?")) {
             dbService.clearAll();
             window.location.reload();
           }
@@ -443,7 +462,7 @@ const App: React.FC = () => {
              alert("System Restored Successfully!");
              window.location.reload();
           } else {
-             alert("Restore Failed. Invalid file format.");
+             alert("Restore Failed.");
           }
         }}
         isOnline={isOnline}

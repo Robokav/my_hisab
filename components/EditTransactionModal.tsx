@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Transaction, Category, TransactionType, PaymentMode } from '../types';
-import { X, Save, ChevronDown, Package } from 'lucide-react';
+import { X, Save, ChevronDown, Package, AlertCircle, Check, Undo } from 'lucide-react';
 
 interface Props {
   transaction: Transaction;
@@ -26,13 +26,17 @@ const EditTransactionModal: React.FC<Props> = ({
   
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const filteredCategories = categories.filter(c => c.type === type);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSaveAttempt = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !description || !selectedCategoryId) return;
+    if (!amount || !selectedCategoryId) return;
+    setShowConfirm(true);
+  };
 
+  const handleActualUpdate = () => {
     const category = categories.find(c => c.id === selectedCategoryId);
     if (!category) return;
 
@@ -48,6 +52,7 @@ const EditTransactionModal: React.FC<Props> = ({
       paymentMode,
       date
     });
+    setShowConfirm(false);
   };
 
   const handleCreateCategory = () => {
@@ -62,7 +67,37 @@ const EditTransactionModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200">
+      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 relative">
+        
+        {/* Confirmation Overlay */}
+        {showConfirm && (
+          <div className="absolute inset-0 z-[70] bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center animate-in zoom-in-95 duration-200">
+            <div className="p-4 bg-amber-50 rounded-full mb-4">
+              <AlertCircle className="w-12 h-12 text-amber-500" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-2">Confirm Modification</h3>
+            <p className="text-sm text-slate-500 mb-8 max-w-[280px]">
+              Are you sure you want to update this transaction? This will overwrite the existing entry in your ledger.
+            </p>
+            <div className="flex w-full gap-3">
+              <button 
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 py-4 text-sm font-extrabold text-slate-500 rounded-2xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Undo className="w-4 h-4" />
+                Go Back
+              </button>
+              <button 
+                onClick={handleActualUpdate}
+                className="flex-1 py-4 bg-indigo-600 text-white text-sm font-extrabold rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Confirm Update
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
             Edit Transaction
@@ -72,7 +107,7 @@ const EditTransactionModal: React.FC<Props> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
+        <form onSubmit={handleSaveAttempt} className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Transaction Type</label>
@@ -120,7 +155,7 @@ const EditTransactionModal: React.FC<Props> = ({
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Description</label>
               <input
                 type="text"
-                required
+                
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What was this for?"

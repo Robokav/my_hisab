@@ -1,16 +1,21 @@
 
+// Refactored to follow @google/genai guidelines: direct use of process.env.API_KEY and proper client initialization.
 import { GoogleGenAI, Type } from "@google/genai";
 import { AiParsedTransaction, Transaction, TransactionType } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const isRateLimitError = (error: any) => {
+  const msg = error?.message?.toLowerCase() || "";
+  return msg.includes("429") || msg.includes("rate limit") || msg.includes("quota");
+};
 
 export const parseNaturalLanguageEntry = async (text: string): Promise<AiParsedTransaction[]> => {
+  // Always initialize with process.env.API_KEY directly.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Parse this statement into an array of JSON objects: "${text}". 
       Each object should represent a distinct transaction. Identify amount, description, category, and payment mode (CASH, UPI, CARD, BANK, WALLET, NET_BANKING, OTHER).
-      If the user lists multiple things like "10 apples and 10 pens", create two separate objects.
       Example: "Paid 500 for grocery and 200 for fuel using UPI" -> 
       [{ "amount": 500, "description": "Grocery", "category": "Groceries", "type": "EXPENSE", "paymentMode": "UPI" },
        { "amount": 200, "description": "Fuel", "category": "Transport", "type": "EXPENSE", "paymentMode": "UPI" }]`,
@@ -40,18 +45,20 @@ export const parseNaturalLanguageEntry = async (text: string): Promise<AiParsedT
     }
     return [];
   } catch (error) {
+    if (isRateLimitError(error)) {
+      console.warn("AI service reached rate limit.");
+    }
     console.error("Gemini Parsing Error:", error);
     return [];
   }
 };
 
 export const suggestCategories = async (text: string): Promise<{name: string, type: TransactionType, icon: string, color: string}[]> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Extract a list of financial categories from this text: "${text}". 
-      Assign a suitable Lucide icon name, a hex color code, and the type (INCOME/EXPENSE).
-      Icons should be from: Tag, Home, ShoppingCart, Coffee, Car, Tv, Zap, Heart, Banknote, Briefcase, TrendingUp, Plane, Book, Gift, Utensils, Smartphone, Stethoscope, Music, Dumbbell.`,
+      contents: `Extract a list of financial categories from this text: "${text}".`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -83,6 +90,7 @@ export const suggestCategories = async (text: string): Promise<{name: string, ty
 export const getFinancialAdvice = async (transactions: Transaction[]): Promise<string> => {
   if (transactions.length === 0) return "Start logging your spends to get smart financial insights.";
   
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   const history = transactions.slice(-20).map(t => {
     return `${t.date}: ${t.type} of ${t.amount} for ${t.description}`;
   }).join("\n");
@@ -90,13 +98,16 @@ export const getFinancialAdvice = async (transactions: Transaction[]): Promise<s
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `You are a savvy financial mentor. Analyze these transactions and give ONE concise, friendly tip or observation. Be encouraging but realistic.
+      contents: `You are a savvy financial mentor. Analyze these transactions and give ONE concise, friendly tip.
       Transactions:
       ${history}`,
       config: { thinkingConfig: { thinkingBudget: 0 } }
     });
     return response.text || "Tracking your expenses is the first step to financial health!";
   } catch (error) {
-    return "Budgeting is the first step to financial freedom!";
+    if (isRateLimitError(error)) {
+      return "The AI is currently busy. Your local tracking is still active!";
+    }
+    return "Consistently logging expenses is the foundation of wealth building.";
   }
 };
