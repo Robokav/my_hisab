@@ -12,36 +12,24 @@ export const dbService = {
   migrate: () => {
     const currentVersion = localStorage.getItem(SCHEMA_VERSION_KEY);
     
-    if (currentVersion === STORAGE_VERSION) return;
-
-    // Sequential migration from older versions
-    const versions = ['v1', 'v2', 'v3', 'v4'];
+    // We run migration even if versions match, just in case orphaned profiles exist
+    const versions = ['v1', 'v2', 'v3', 'v4', 'v5'];
     let migrationHappened = false;
 
+    // Check for any profile list in any version
     for (const v of versions) {
       const oldProfiles = localStorage.getItem(`hisab_pro_profiles_${v}`);
-      const oldActiveId = localStorage.getItem(`hisab_pro_active_profile_id_${v}`);
-      const oldOpening = localStorage.getItem(`hisab_pro_monthly_opening_${v}`);
-
-      if (oldProfiles) {
+      if (oldProfiles && !localStorage.getItem(PROFILES_KEY)) {
         localStorage.setItem(PROFILES_KEY, oldProfiles);
-        migrationHappened = true;
-      }
-      if (oldActiveId) {
-        localStorage.setItem(ACTIVE_PROFILE_ID_KEY, oldActiveId);
-        migrationHappened = true;
-      }
-      if (oldOpening) {
-        localStorage.setItem(MONTHLY_OPENING_BALANCES_KEY, oldOpening);
         migrationHappened = true;
       }
     }
 
-    // Special check for even older un-versioned keys
-    if (!migrationHappened) {
-      const legacyProfiles = localStorage.getItem('profiles');
-      if (legacyProfiles) {
-        localStorage.setItem(PROFILES_KEY, legacyProfiles);
+    // Special check for legacy prototype keys
+    if (!localStorage.getItem(PROFILES_KEY)) {
+      const legacy = localStorage.getItem('profiles') || localStorage.getItem('hisab_profiles');
+      if (legacy) {
+        localStorage.setItem(PROFILES_KEY, legacy);
         migrationHappened = true;
       }
     }
@@ -49,26 +37,51 @@ export const dbService = {
     localStorage.setItem(SCHEMA_VERSION_KEY, STORAGE_VERSION);
   },
 
-  // Scans localStorage for any keys that look like transaction data but aren't linked to current profiles
-  scanForOrphanedData: (): { id: string, count: number }[] => {
-    const orphaned: { id: string, count: number }[] = [];
+  // AGGRESSIVE SIGNATURE SCAN: Inspects EVERY key in storage for transaction-like data
+  scanForOrphanedData: (): { id: string, count: number, key: string, date?: string }[] => {
+    const orphaned: { id: string, count: number, key: string, date?: string }[] = [];
     const currentProfiles = dbService.getProfiles();
     const currentIds = new Set(currentProfiles.map(p => p.id));
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('profile_') && key.endsWith('_transactions')) {
-        const id = key.replace('profile_', '').replace('_transactions', '');
-        if (!currentIds.has(id)) {
-          try {
-            const data = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(data) && data.length > 0) {
-              orphaned.push({ id, count: data.length });
-            }
-          } catch (e) {
-            console.error("Error parsing orphaned data", e);
+      if (!key) continue;
+
+      // Skip current version keys to avoid duplicates
+      if (key === PROFILES_KEY || key.includes(STORAGE_VERSION)) {
+        // We only skip if the profile ID is already known
+        const potentialId = key.replace('profile_', '').replace('_transactions', '');
+        if (currentIds.has(potentialId)) continue;
+      }
+
+      try {
+        const rawData = localStorage.getItem(key);
+        if (!rawData) continue;
+        
+        const data = JSON.parse(rawData);
+        
+        // SIGNATURE 1: Is it an array of transactions?
+        if (Array.isArray(data) && data.length > 0) {
+          const firstItem = data[0];
+          // Check if it has essential transaction fields
+          if (('amount' in firstItem && 'description' in firstItem) || ('categoryName' in firstItem)) {
+            const idFromKey = key.replace('profile_', '').replace('_transactions', '').substring(0, 10);
+            orphaned.push({ 
+              id: idFromKey, 
+              count: data.length, 
+              key: key,
+              date: firstItem.date || firstItem.createdAt 
+            });
           }
         }
+        
+        // SIGNATURE 2: Is it a legacy profile list?
+        if (key.includes('profiles') && Array.isArray(data) && !currentProfiles.length) {
+            // If we have no profiles but found a profile list, that's a major orphan
+            orphaned.push({ id: 'legacy_list', count: data.length, key: key });
+        }
+      } catch (e) {
+        // Not JSON, ignore
       }
     }
     return orphaned;
