@@ -4,7 +4,7 @@ import { Category, TransactionType, Transaction, Profile, PaymentMode } from '..
 import { 
   X, Plus, Trash2, LayoutGrid, GripVertical, Edit2, Save, Undo, Check, Layers, 
   Database, ShieldCheck, UploadCloud, DownloadCloud, ChevronUp, ChevronDown, 
-  TrendingUp, Activity, Tag, HelpCircle, Sparkles, Loader2, Wand2
+  TrendingUp, Activity, Tag, HelpCircle, Sparkles, Loader2, Wand2, Search, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { suggestCategories } from '../services/geminiService';
@@ -70,6 +70,10 @@ const CategoryManager: React.FC<Props> = ({
   const [editCatColor, setEditCatColor] = useState('');
   const [editCatIcon, setEditCatIcon] = useState('');
 
+  // Recovery State
+  const [orphanedData, setOrphanedData] = useState<{ id: string, count: number }[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+
   // Single Category Creation State
   const [isAddingSingle, setIsAddingSingle] = useState(false);
   const [newCatName, setNewCatName] = useState('');
@@ -112,6 +116,31 @@ const CategoryManager: React.FC<Props> = ({
     reader.readAsText(file);
   };
 
+  const handleDeepScan = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      const found = dbService.scanForOrphanedData();
+      setOrphanedData(found);
+      setIsScanning(false);
+    }, 1000);
+  };
+
+  const handleRecoverOrphan = (id: string) => {
+    const name = prompt("Enter a name for this recovered interface:", "Recovered Data");
+    if (name) {
+      const newProfile: Profile = {
+        id,
+        name,
+        color: '#6366f1',
+        icon: 'History',
+        createdAt: new Date().toISOString()
+      };
+      const updatedProfiles = [...profiles, newProfile];
+      dbService.saveProfiles(updatedProfiles);
+      window.location.reload(); // Hard reload to re-initialize state with found data
+    }
+  };
+
   const startEditingProfile = (p: Profile) => {
     setEditingProfileId(p.id);
     setEditProfName(p.name);
@@ -149,7 +178,6 @@ const CategoryManager: React.FC<Props> = ({
     const context = activeProfile ? `Suggest smart finance categories for a ledger named "${activeProfile.name}".` : "Suggest common personal finance categories.";
     try {
       const suggestions = await suggestCategories(context);
-      // Filter out duplicates
       const filtered = suggestions.filter(s => !categories.some(c => c.name.toLowerCase() === s.name.toLowerCase()));
       setAiSuggestions(filtered);
     } catch (err) {
@@ -429,6 +457,56 @@ const CategoryManager: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Data Recovery Section */}
+              <div className="p-6 bg-indigo-50 rounded-[2rem] border border-indigo-100 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4" />
+                      Legacy Data Recovery
+                    </h3>
+                    <p className="text-[10px] text-indigo-600 font-bold mt-1">Scan for data from older versions or lost profiles.</p>
+                  </div>
+                  <button 
+                    onClick={handleDeepScan}
+                    disabled={isScanning}
+                    className="p-2 bg-white text-indigo-600 rounded-xl shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isScanning ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {orphanedData.length > 0 && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    {orphanedData.map(data => (
+                      <div key={data.id} className="bg-white p-4 rounded-2xl border border-indigo-100 flex items-center justify-between shadow-sm">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <p className="text-xs font-black text-slate-800 uppercase tracking-tighter">Detected Ledger</p>
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1">ID: {data.id} • {data.count} Transactions Found</p>
+                        </div>
+                        <button 
+                          onClick={() => handleRecoverOrphan(data.id)}
+                          className="px-4 py-2 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-100"
+                        >
+                          Reconnect
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {orphanedData.length === 0 && !isScanning && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-indigo-100/50 rounded-xl border border-indigo-100/50">
+                    <Check className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="text-[9px] font-black text-indigo-500 uppercase">System Clean • No orphaned data found</span>
+                  </div>
+                )}
+              </div>
+
               <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-center sm:text-left">
                   <div className="flex items-center gap-2 mb-1 justify-center sm:justify-start">
@@ -444,7 +522,7 @@ const CategoryManager: React.FC<Props> = ({
                   <div className="flex items-center gap-2 mb-1 justify-center sm:justify-start"><Trash2 className="w-4 h-4 text-red-600" /><p className="text-base font-extrabold text-red-900">Factory Reset</p></div>
                   <p className="text-xs text-red-600 mt-1">Permanently delete all data from this phone.</p>
                 </div>
-                <button onClick={onClearData} className="w-full sm:w-auto px-6 py-3 bg-red-600 text-white text-xs font-extrabold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 active:scale-95">WIPE ALL DATA</button>
+                <button onClearData={onClearData} className="w-full sm:w-auto px-6 py-3 bg-red-600 text-white text-xs font-extrabold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 active:scale-95">WIPE ALL DATA</button>
               </div>
             </div>
           )}
